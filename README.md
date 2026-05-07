@@ -48,44 +48,6 @@ npm run dev
 
 ---
 
-## 🌐 Deploy to Railway
-
-### Option A: GitHub + Railway (Recommended)
-
-1. Push this project to GitHub:
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git remote add origin https://github.com/YOUR_USERNAME/taskflow.git
-git push -u origin main
-```
-
-2. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub**
-3. Select your repo — Railway auto-detects Node.js and deploys
-4. Your app is live! Copy the URL from the Railway dashboard.
-
-### Option B: Railway CLI
-
-```bash
-# Install Railway CLI
-npm install -g @railway/cli
-
-# Login and deploy
-railway login
-railway init
-railway up
-```
-
-### Environment Variables (Optional)
-Set in Railway dashboard → Variables:
-```
-JWT_SECRET=your_super_secret_key_here_change_this
-PORT=3000
-```
-
----
-
 ## 📁 Project Structure
 
 ```
