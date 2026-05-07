@@ -1,16 +1,121 @@
-const Database = require('better-sqlite3');
+const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 
 const DB_DIR = process.env.DB_DIR || path.join(__dirname, '..', 'data');
 if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
 
-const db = new Database(path.join(DB_DIR, 'taskflow.db'));
+const DB_PATH = path.join(DB_DIR, 'taskflow.db');
 
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const raw = new sqlite3.Database(DB_PATH, (err) => {
+  if (err) { console.error('DB open error:', err); process.exit(1); }
+  console.log('📦 Database connected:', DB_PATH);
+});
 
-db.exec(`
+raw.serialize(() => {
+  raw.run('PRAGMA journal_mode = WAL;');
+  raw.run('PRAGMA foreign_keys = ON;');
+});
+
+
+function runSync(sql, params = []) {
+  const sab = new SharedArrayBuffer(4);
+  const flag = new Int32Array(sab);
+  let result = null, error = null;
+
+  raw.serialize(() => {
+    raw.run(sql, params, function(err) {
+      if (err) error = err;
+      else result = { lastInsertRowid: this.lastID, changes: this.changes };
+      Atomics.store(flag, 0, 1);
+      Atomics.notify(flag, 0);
+    });
+  });
+
+  Atomics.wait(flag, 0, 0);
+  if (error) throw error;
+  return result;
+}
+
+function getSync(sql, params = []) {
+  const sab = new SharedArrayBuffer(4);
+  const flag = new Int32Array(sab);
+  let row = null, error = null;
+
+  raw.serialize(() => {
+    raw.get(sql, params, (err, r) => {
+      if (err) error = err;
+      else row = r || null;
+      Atomics.store(flag, 0, 1);
+      Atomics.notify(flag, 0);
+    });
+  });
+
+  Atomics.wait(flag, 0, 0);
+  if (error) throw error;
+  return row;
+}
+
+function allSync(sql, params = []) {
+  const sab = new SharedArrayBuffer(4);
+  const flag = new Int32Array(sab);
+  let rows = [], error = null;
+
+  raw.serialize(() => {
+    raw.all(sql, params, (err, r) => {
+      if (err) error = err;
+      else rows = r || [];
+      Atomics.store(flag, 0, 1);
+      Atomics.notify(flag, 0);
+    });
+  });
+
+  Atomics.wait(flag, 0, 0);
+  if (error) throw error;
+  return rows;
+}
+
+function execSync(sql) {
+  const sab = new SharedArrayBuffer(4);
+  const flag = new Int32Array(sab);
+  let error = null;
+
+  raw.serialize(() => {
+    raw.exec(sql, (err) => {
+      if (err) error = err;
+      Atomics.store(flag, 0, 1);
+      Atomics.notify(flag, 0);
+    });
+  });
+
+  Atomics.wait(flag, 0, 0);
+  if (error) throw error;
+}
+
+const db = {
+  pragma() {},  
+
+  exec(sql) {
+    execSync(sql);
+  },
+
+  prepare(sql) {
+    return {
+      get(...params) {
+        return getSync(sql, params.flat());
+      },
+      all(...params) {
+        return allSync(sql, params.flat());
+      },
+      run(...params) {
+        return runSync(sql, params.flat());
+      }
+    };
+  }
+};
+
+// ─── Schema ───────────────────────────────────────────────────────────────────
+execSync(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
